@@ -24,6 +24,9 @@ import requests
 import psutil
 from tqdm import tqdm
 
+import async_timeout
+from asyncio_extras.contextmanager import async_contextmanager
+
 BIN_PATH = Path(__file__).parent / 'bin'
 
 def get_regkey(root, sub_key, name):
@@ -117,58 +120,8 @@ def check_call_as_admin(cmdLine=None):
     cmd = subprocess.list2cmdline([cmdLine[0]])
     params = subprocess.list2cmdline(cmdLine[1:])
     return run_as_admin(cmd, params)
-	
-def dl_file_pbar(source_url, dest_path, sess=None, autoname=False, **kw):
-    from urllib.parse import urlparse, unquote
-    if sess is None:
-        stream = requests.get(source_url, stream=True, **kw)
-    else:
-        stream = sess.get(source_url, stream=True, **kw)
 
-    try:
-        total_bytes = int(stream.headers['content-length'])
-    except:
-        total_bytes = None
 
-    if autoname:
-        # dest_path is a directory path, get the filename automatically
-        try:
-            dest_path = Path(dest_path) / re.findall("filename=(.+)", r.headers['content-disposition'])[0]
-            if fname is None:
-                raise Exception()
-        except:
-            dest_path = Path(dest_path) / os.path.basename(unquote(urlparse(source_url).path))
-
-    with open(str(dest_path), 'wb') as dest_file:
-        with tqdm(total=total_bytes) as pbar:
-            for chunk in stream.iter_content():
-                dest_file.write(chunk)
-                pbar.update(len(chunk))
-				
-NEXUS_LOGIN_URL = 'https://www.nexusmods.com/oblivion/sessions/?Login'
-
-class NexusDownloader:
-    def __init__(self, username, password):
-        self.sess = requests.session()
-        self.username = username
-        self.password = password
-        self.redirect_re = re.compile(r'(?ms).*?window\.location\.href = "(http://filedelivery\.nexusmods\.com[^"]*?)".*')
-        self.logged_in = False
-    
-    def login(self):
-        resp = self.sess.post(NEXUS_LOGIN_URL, data={'username': self.username, 'password': self.password})
-        resp.raise_for_status()
-        self.logged_in = True
-        logger.info('successfully logged into Nexus Mods')
-    
-    def download(self, url, dest_path, autoname=False):
-        if not self.logged_in:
-            logger.info('not logged in, logging in')
-            self.login()
-        page_text = self.sess.get(url).text
-        new_url = self.redirect_re.match(page_text).group(1)
-        dl_file_pbar(new_url, dest_path, sess=self.sess, autoname=autoname)
-		
 _77PATH = BIN_PATH / '7z.exe'
 def extract_path(path, extractdir=None):
     extractdir = str(extractdir) or str(path.parent)
@@ -177,40 +130,35 @@ def extract_path(path, extractdir=None):
         [str(_77PATH), 'x', '-y', str(path)],
         cwd=extractdir,
     )
-	
+
 def install_nullsoft_silent(path, extra_flags=()):
     check_call_as_admin([str(path), '/S', *extra_flags])
 
 	
+class cachedclassproperty(object):
+    def __init__(self, func):
+        self.__doc__ = getattr(func, '__doc__')
+        self.func = func
 
-def query_yes_no(question, default="yes"):
-    """Ask a yes/no question via raw_input() and return their answer.
+    def __get__(self, obj, cls):
+        value = self.func(cls)
+        setattr(cls, self.func.__name__, value)
+        return value
 
-    "question" is a string that is presented to the user.
-    "default" is the presumed answer if the user just hits <Enter>.
-        It must be "yes" (the default), "no" or None (meaning
-        an answer is required of the user).
-
-    The "answer" return value is True for "yes" or False for "no".
-    """
-    valid = {"yes": True, "y": True, "ye": True,
-             "no": False, "n": False}
-    if default is None:
-        prompt = " [y/n] "
-    elif default == "yes":
-        prompt = " [Y/n] "
-    elif default == "no":
-        prompt = " [y/N] "
-    else:
-        raise ValueError("invalid default answer: '%s'" % default)
-
+    def __repr__(self):
+        cn = self.__class__.__name__
+        return '<%s func=%s>' % (cn, self.func)
+		
+#asyncutils
+@async_contextmanager      
+async def http_request(session, verb, *args, timeout=10, **kwargs):
+    with async_timeout.timeout(timeout):
+        async with session.request(verb, *args, **kwargs) as response:
+            yield response
+            
+async def chunked(response, chunk_size):
     while True:
-        sys.stdout.write(question + prompt)
-        choice = input().lower()
-        if default is not None and choice == '':
-            return valid[default]
-        elif choice in valid:
-            return valid[choice]
-        else:
-            sys.stdout.write("Please respond with 'yes' or 'no' "
-                             "(or 'y' or 'n').\n")
+        chunk = await response.content.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
