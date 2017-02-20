@@ -24,6 +24,7 @@ import requests
 import psutil
 from tqdm import tqdm
 
+import asyncio
 import async_timeout
 from asyncio_extras.contextmanager import async_contextmanager
 
@@ -122,19 +123,10 @@ def check_call_as_admin(cmdLine=None):
     return run_as_admin(cmd, params)
 
 
-_77PATH = BIN_PATH / '7z.exe'
-def extract_path(path, extractdir=None):
-    extractdir = str(extractdir) or str(path.parent)
-    #TODO add pbar?
-    subprocess.check_call(
-        [str(_77PATH), 'x', '-y', str(path)],
-        cwd=extractdir,
-    )
-
 def install_nullsoft_silent(path, extra_flags=()):
     check_call_as_admin([str(path), '/S', *extra_flags])
 
-	
+
 class cachedclassproperty(object):
     def __init__(self, func):
         self.__doc__ = getattr(func, '__doc__')
@@ -148,10 +140,10 @@ class cachedclassproperty(object):
     def __repr__(self):
         cn = self.__class__.__name__
         return '<%s func=%s>' % (cn, self.func)
-		
+
 #asyncutils
 @async_contextmanager      
-async def http_request(session, verb, *args, timeout=10, **kwargs):
+async def http_request(session, verb, *args, timeout=(5*60), **kwargs):
     with async_timeout.timeout(timeout):
         async with session.request(verb, *args, **kwargs) as response:
             yield response
@@ -162,3 +154,34 @@ async def chunked(response, chunk_size):
         if not chunk:
             break
         yield chunk
+        
+def recurse_files(path):
+    """
+    walks all files (not directories) in path and yields them one
+    at a time (in arbitrary order) as paths relative to path
+    """
+    for root, dirs, files in os.walk(str(path)):
+        root_path = Path(root)
+        for file in files:
+            yield (root_path / file).relative_to(path)
+
+def recurse_all(path):
+    for root, dirs, files in os.walk(str(path)):
+        root_path = Path(root)
+        for d in dirs:
+            yield root_path / d
+        for file in files:
+            yield root_path / file
+
+async def extract_path_async(path, extractdir=None):
+    _77PATH = r'C:\Program Files\7-Zip\7z.exe'
+    
+    extractdir = str(extractdir) or str(path.parent)
+    #TODO add pbar?
+    proc = await asyncio.create_subprocess_exec(
+        str(_77PATH), 'x', '-y', str(path),
+        cwd=extractdir,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise Exception(f'7zip returncode={proc.returncode}')
