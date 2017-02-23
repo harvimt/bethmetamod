@@ -32,7 +32,7 @@ _SHGetKnownFolderPath.argtypes = [
 
 class PathNotFoundException(Exception): pass
 
-def get_path(folderid, user_handle=UserHandle.common):
+def get_path(folderid, user_handle=UserHandle.current):
     fid = GUID(UUID(str(getattr(win32com.shell.shell, 'FOLDERID_' + folderid))))
     pPath = ctypes.c_wchar_p()
     S_OK = 0
