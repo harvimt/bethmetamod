@@ -86,7 +86,7 @@ def is_user_admin():
 def get_special_folder(folder_name):
     csidl = getattr(shellcon, 'CSIDL_' + folder_name.upper())
     return win32com.shell.shell.SHGetFolderPath(0, csidl, 0, 0)
-	
+    
 def run_as_admin(cmd, params):
     if os.name != 'nt':
         raise RuntimeError("This function is only implemented on Windows.")
@@ -116,7 +116,7 @@ def run_as_admin(cmd, params):
     if rc != 0:
         raise subprocess.CalledProcessError(rc, cmdLine)
     return rc
-	
+    
 def check_call_as_admin(cmdLine=None):
     cmd = subprocess.list2cmdline([cmdLine[0]])
     params = subprocess.list2cmdline(cmdLine[1:])
@@ -143,13 +143,14 @@ class cachedclassproperty(object):
 
 #asyncutils
 @async_contextmanager      
-async def http_request(session, verb, *args, timeout=(5*60), **kwargs):
-    with async_timeout.timeout(timeout):
-        async with session.request(verb, *args, **kwargs) as response:
-            yield response
+async def http_request(session, verb, *args, **kwargs):
+    #with async_timeout.timeout(timeout):
+    async with session.request(verb, *args, **kwargs) as response:
+        yield response
             
-async def chunked(response, chunk_size):
+async def chunked(response, chunk_size, timeout=60):
     while True:
+        #with async_timeout.timeout(timeout):
         chunk = await response.content.read(chunk_size)
         if not chunk:
             break
