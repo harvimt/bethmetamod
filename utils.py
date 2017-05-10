@@ -19,6 +19,7 @@ import winreg
 import win32api
 import win32com.client
 import win32com.shell
+import ntfsutils.fs
 
 import requests
 import psutil
@@ -69,6 +70,18 @@ def hash_file(hashalg, file):
     for chunk in iter(functools.partial(file.read, 4096), b''):
         h.update(chunk)
     return h.hexdigest()
+	
+def get_file_id(path):
+	#TODO posix
+	if isinstance(path, Path):
+		path = str(path)
+		
+	f = ntfsutils.fs.getfileinfo(path)
+	return (
+		f.nFileIndexHigh, f.nFileIndexLow, f.dwVolumeSerialNumber,
+		f.nFileSizeHigh, f.nFileSizeLow
+	)
+		
 
 def sha256_path(path):
     return hash_file('sha256', path)
