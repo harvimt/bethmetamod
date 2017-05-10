@@ -1,6 +1,10 @@
 import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('bethmetamod')
+http_log = logging.getLogger('aiohttp.client')
+http_log.setLevel(logging.DEBUG)
+http_log.addHandler(logging.StreamHandler())
+
 
 import asyncio
 import sys
@@ -141,6 +145,9 @@ class BaseDownload:
 		
 	async def _predownload(self, mod, session, force):
 		"""Return True if download is necessary."""
+		if self.dl_info is None:
+			log.debug("must download this file, we don't even know it's filename!")
+			return True
 		dl_path = mod.dl_path / self.dl_info.filename
 		log.debug(f'checking to see if {dl_path} needs to be downloaded')
 		do_download = True
@@ -163,13 +170,14 @@ class BaseDownload:
 
 		return True
 	
-	async def _do_download(self, url, mod, session):
+	async def _do_download(self, url, mod, session, **kwargs):
 		log.info(f'Downloading {url}')
-		async with http_request(session, 'get', url, timeout=None) as response:
-			try:
+		async with http_request(session, 'get', url, timeout=None, **kwargs) as response:
+			response.raise_for_status()
+			if self.dl_info is not None:
 				dl_filename = self.dl_info.filename
 				dl_size = self.dl_info.size
-			except KeyError:
+			else:
 				try:
 					dispo = response.headers['Content-Disposition']
 					_, dl_filename = dispo.split('filename=')
@@ -180,14 +188,14 @@ class BaseDownload:
 				
 				try:
 					dl_size = int(response.headers.get('Content-Length'))
-				except ValueError:
+				except (ValueError, TypeError):
 					dl_size = None
 				
 			dl_path = mod.dl_path / dl_filename
   
 			log.info(f'Saving content to {dl_path}')
 			log.info(f'Content size: {dl_size}')
-		
+			log.debug(f'headers: {response.headers!r}')
 			pbar = tqdm(total=dl_size, unit='B', unit_scale=True, desc=dl_filename)
 			dl_path.parent.mkdir(parents=True, exist_ok=True)
 			async with open_async(str(dl_path), 'wb') as f:
@@ -195,6 +203,10 @@ class BaseDownload:
 					await f.write(chunk)
 					pbar.update(len(chunk))
 			pbar.close()
+			
+			if b'ERROR 403: Forbidden' in dl_path.open('rb').read(1024*8):
+				dl_path.unlink()
+				raise Exception("Nexus Doesn't Like us :-(")
 			
 			self.dl_info = DownloadInfo(
 				filename=dl_filename,
@@ -250,7 +262,7 @@ class NexusDownload(BaseDownload):
 			page_text = await response.text()
 			new_url = self.redirect_re.match(page_text).group(1)
 		
-		await self._do_download(new_url, mod, session)
+		await self._do_download(new_url, mod, session, headers={'Referer': url})
 
 class Download(BaseDownload):
 	def __init__(self, url, **kwargs):
@@ -644,33 +656,35 @@ class QuarlsTexturePack3Redimized(Mod):
 
 QTP3R = QuarlsTexturePack3Redimized
 
-'''
-Graphic Improvement Project
-http://www.nexusmods.com/oblivion/download/1000016139
+class GraphicImprovementProject(Mod):
+	downloads = [ NexusDownload('1000016139')]
+	
+class ZiraHorseCompilationModpack(Mod):
+	downloads = [ NexusDownload('77575')]
 
-Zira Horse Compilation Modpack
-http://www.nexusmods.com/oblivion/ajax/downloadfile?id=77575
+class RingRetexture(Mod):
+	downloads = [ NexusDownload('1000016754')]
+	
+class KafeisArmoredCirclets(Mod):
+	downloads = [ NexusDownload('9492')]
+	
+class KoldornsSewerTextures2(Mod):
+	downloads = [ NexusDownload('31103')]
+	
+class KoldornsCaveTextures2(Mod):
+	downloads = [ NexusDownload('31015')]
+	
+class ManglersEquipmentAndAmmoTextures(Mod):
+	downloads = [ NexusDownload('1000004718')]
+	
+MEAT = ManglersEquipmentAndAmmoTextures
 
+class BomretTexturePackForShiveringIslesWithUSIP(Mod):
+	downloads = [ NexusDownload('1000010426')]
+
+'''	
 Astrob0y's Tweaked ENB
 http://www.nexusmods.com/oblivion/ajax/downloadfile?id=1000008935
-
-Ring Retexture
-http://www.nexusmods.com/oblivion/download/1000016754
-
-Kafeis Armored Circlets
-http://www.nexusmods.com/oblivion/download/9492
-
-Koldorn's Sewer Textures 2
-http://www.nexusmods.com/oblivion/download/31103
-
-Koldorn's Cave Textures 2
-http://www.nexusmods.com/oblivion/download/31015
-
-Mangler's Equipment and Ammo Textures (MEAT)
-http://www.nexusmods.com/oblivion/download/1000004718
-
-Bomret Texture Pack for Shivering Isles with USIP
-http://www.nexusmods.com/oblivion/download/1000010426
 '''
 
 if sys.platform == 'win32':
@@ -697,6 +711,14 @@ async def main(loop):
 		OSR(),
 		# Textures
 		QTP3R(),
+		GraphicImprovementProject(),
+		ZiraHorseCompilationModpack(),
+		RingRetexture(),
+		KafeisArmoredCirclets(),
+		KoldornsSewerTextures2(),
+		KoldornsCaveTextures2(),
+		MEAT(),
+		BomretTexturePackForShiveringIslesWithUSIP(),
 		# Install Last
 		INITweaks(),
 		ArchiveInvalidationInvalidated(),
@@ -761,4 +783,5 @@ async def main(loop):
 		await mod.postprocess()
 	log.info('Done Applying Changes')
 
-loop.run_until_complete(main(loop))
+if __name__ == '__main__':
+	loop.run_until_complete(main(loop))
