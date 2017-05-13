@@ -1,16 +1,15 @@
 import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('bethmetamod')
-http_log = logging.getLogger('aiohttp.client')
-http_log.setLevel(logging.DEBUG)
-http_log.addHandler(logging.StreamHandler())
-
 
 import asyncio
 import sys
 from asyncio_extras.file import open_async
 
 from pathlib import Path
+import codecs
+import io
+import textwrap
 import winreg
 from utils import *
 import psutil
@@ -19,6 +18,7 @@ import shelve
 from collections import namedtuple
 from boltons.cacheutils import cachedproperty
 from boltons.strutils import camel2under
+from boltons.fileutils import atomic_save
 from tqdm import tqdm
 import urllib.parse
 import yaml
@@ -28,6 +28,7 @@ import pefile
 import known_folders
 
 from datetime import datetime, timedelta
+import shlex
 import subprocess
 
 class Game:
@@ -78,6 +79,10 @@ class Game:
 	def user_data_path(cls):
 		# TODO probably more things I need to do to get localized "My Games"
 		return Path(known_folders.get_path('Documents')) / 'My Games' / cls.REG_NAME
+		
+	@cachedclassproperty
+	def app_data_path(cls):
+		return Path(known_folders.get_path('LocalAppData')) / cls.REG_NAME
 	
 	@cachedclassproperty
 	def user_ini(cls):
@@ -85,6 +90,7 @@ class Game:
 
 class Oblivion(Game):
 	REG_NAME = 'oblivion'
+	BOSS_NAME = 'Oblivion'
 	STEAM_ID = '22330'
 	LAUNCHER_EXE = 'OblivionLauncher.exe'
 	GAME_EXE = 'Oblivion.exe'
@@ -695,20 +701,20 @@ else:
 	
 async def main(loop):
 	mod_list = [
-		FastExit(),
-		FourGBPatch(),
+		#FastExit(),
+		#FourGBPatch(),
 		OBSE(),
 		OneTweak(),
 		OBSETester(),
-		ENB(),
-		ENBoost(),
-		MoreHeap(),
+		#ENB(),
+		#ENBoost(),
+		#MoreHeap(),
 		ConScribe(),
 		Pluggy(),
 		DarnifiedUI(),
 		DarnifiedUIConfigAddon(),
 		Streamline(),
-		OSR(),
+		#OSR(),
 		# Textures
 		QTP3R(),
 		GraphicImprovementProject(),
@@ -782,6 +788,38 @@ async def main(loop):
 	for mod in mod_list:
 		await mod.postprocess()
 	log.info('Done Applying Changes')
+	
+	log.info('modifying load order')
+	boss_uninstall_string = get_regkey('HKLM', r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BOSS', 'UninstallString')
+	boss_install_location = Path(shlex.split(boss_uninstall_string)[0]).parent
+	boss_exe_path = boss_install_location / 'boss.exe'
+	
+	proc = await asyncio.create_subprocess_exec(
+		str(boss_exe_path), '-s', '-g', Config.game.BOSS_NAME,
+                cwd=str(boss_install_location),
+		stderr=sys.stderr,
+		stdout=sys.stdout,
+	)
+	await proc.wait()
+	
+	log.info('enabling all .esp and .esm files')
+	PLUGINS_HEADER = textwrap.dedent('''
+	# This file is used to tell Oblivion which data files to load.
+	# WRITE YOUR OWN PYTHON SCRIPT TO MODIFY THIS FILE (lol)
+	# Please do not modify this file by hand.
+	''').strip()
+	
+	with atomic_save(str(Config.game.app_data_path / 'plugins.txt')) as f:
+		with io.TextIOWrapper(f, 'ascii') as ef:
+			ef.write(PLUGINS_HEADER)
+			ef.write('\n')
+			for esm in Config.game.root_dir.glob('Data/*.esm'):
+				ef.write(esm.name)
+				ef.write('\n')
+			for esp in Config.game.root_dir.glob('Data/*.esp'):
+				ef.write(esp.name)
+				ef.write('\n')
+
 
 if __name__ == '__main__':
 	loop.run_until_complete(main(loop))
