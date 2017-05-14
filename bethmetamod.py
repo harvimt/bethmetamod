@@ -653,7 +653,7 @@ class OblivionStutterRemover(Mod):
 		yield from self.install(Path('./Data'), prefix=Path('.'))
 		
 		for dll_path in self.mod_path.glob('*.dll'):
-			yield dll_path, Path('./Data/OBSE/Plugins/') / dll_path.name
+			yield dll_path, Path('./Data/OBSE/Plugins/ComponentDLLs') / dll_path.name
 
 OSR = OblivionStutterRemover
 
