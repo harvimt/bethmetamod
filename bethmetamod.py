@@ -822,8 +822,12 @@ async def main(loop):
 			purged_path = purged_root / path
 			purged_path.parent.mkdir(exist_ok=True, parents=True)
 			(Config.game.root_dir / path).rename(purged_path)
-			
-	#TODO purge empty directories somehow?
+	
+	log.info('purging empty directories')
+	for d in recurse_dirs(Config.game.root_dir):
+		if dir_is_empty(d):
+			d.rmdir()
+		
 	log.info('postprocessing')
 	for mod in mod_list:
 		await mod.postprocess()
