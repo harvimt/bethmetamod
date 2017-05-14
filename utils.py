@@ -197,6 +197,21 @@ def recurse_all(path):
 		for file in files:
 			yield root_path / file
 
+def recurse_dirs(path, topdown=False):
+	for root, dirs, files in os.walk(str(path), topdown=topdown):
+		root_path = Path(root)
+		for d in dirs:
+			yield root_path / d
+			
+def dir_is_empty(path):
+	try:
+		next(path.iterdir())
+	except StopIteration:
+		return True
+	else:
+		return False
+
+
 async def extract_path_async(path, extractdir=None):
 	_77PATH = r'C:\Program Files\7-Zip\7z.exe'
 	
