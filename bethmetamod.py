@@ -590,14 +590,16 @@ class DarnifiedUI(Mod):
 		
 		if False: #FIXME if Trollf Loading Screens are installed
 			yield self.mod_path / "custom_files/trollf_loading_menu.xml", Path('menus/loading_menu.xml')
-			
-		if False and not 'OblivionXP':# FIXME if "KCAS-AF Menus" are installed
-			if insstats: # what does insstats mean?
-				xml = (self.mod_path / "menus/prefabs/darn/stats_config.xml").read_text().replace("<_KCAS> &false; </_KCAS>", "<_KCAS> &true; </_KCAS>")
-				(self.mod_path / "menus/prefabs/darn/stats_config_kcas.xml").write_text(xml)
-				yield self.mod_path / "menus/prefabs/darn/stats_config_kcas.xml", Path("menus/prefabs/darn/stats_config.xml")
-			if inslevelup: # what does inslevelup mean?
-				yield self.mod_path / "custom_files/KCAS_levelup_menu.xml", Path("menus/levelup_menu.xml")
+		
+		kcas = True  # FIXME make automatic; running Realistic Levelling
+		obxp = False # FIXME make automatic; not running oblivion XP
+		#insstats = True
+		inslevelup = True
+		if kcas and not obxp:# FIXME if "KCAS-AF Menus" are installed
+			xml = (self.mod_path / "menus/prefabs/darn/stats_config.xml").read_text().replace("<_KCAS> &false; </_KCAS>", "<_KCAS> &true; </_KCAS>")
+			(self.mod_path / "menus/prefabs/darn/stats_config_kcas.xml").write_text(xml)
+			yield self.mod_path / "menus/prefabs/darn/stats_config_kcas.xml", Path("menus/prefabs/darn/stats_config.xml")
+			yield self.mod_path / "custom_files/KCAS_levelup_menu.xml", Path("menus/levelup_menu.xml")
 
 	async def postprocess(self):
 		if self.colored_local_map:
@@ -645,6 +647,9 @@ class FastExit(Mod):
 	
 class Streamline(Mod):
 	downloads = [NexusDownload('9940')]
+	
+class MenuQue(Mod):
+	downloads = [NexusDownload('1000003136')]
 
 class OblivionStutterRemover(Mod):
 	downloads = [NexusDownload('1000006913'), NexusDownload('75837')]
@@ -693,6 +698,35 @@ Astrob0y's Tweaked ENB
 http://www.nexusmods.com/oblivion/ajax/downloadfile?id=1000008935
 '''
 
+# Gameplay
+class RealisticLeveling(Mod):
+	downloads = [ NexusDownload('85564')]
+	
+class HUDStatusBars(Mod):
+	downloads = [ NexusDownload('86447') ]
+	
+	def modify(self):
+		yield from self.install(Path(), self.mod_path / Path('00 Core'))
+		yield from self.install(Path(), self.mod_path / Path('01 Vanilla style'))
+		
+		
+class UnnecessaryViolenceIII(Mod):
+	downloads = [ NexusDownload('1000011789') ]
+	
+	def modify(self):
+		for src, dest in super().modify():
+			if dest.parent == Path('Data/ini/optional uv3 hsb'):
+				continue
+			yield src, dest
+			
+		yield from self.install(Path('.'), self.mod_path / 'ini/optional uv3 hsb', prefix=Path('Data/ini'))
+		
+
+UV3 = UnnecessaryViolenceIII
+
+class NifSE(Mod):
+	downloads = [ NexusDownload('84943') ]
+
 if sys.platform == 'win32':
 	loop = asyncio.ProactorEventLoop()
 	asyncio.set_event_loop(loop)
@@ -701,20 +735,22 @@ else:
 	
 async def main(loop):
 	mod_list = [
-		#FastExit(),
-		#FourGBPatch(),
+		FastExit(),
+		FourGBPatch(),
 		OBSE(),
 		OneTweak(),
 		OBSETester(),
-		#ENB(),
-		#ENBoost(),
-		#MoreHeap(),
+		MenuQue(),
+		ENB(),
+		ENBoost(),
+		MoreHeap(),
 		ConScribe(),
 		Pluggy(),
+		NifSE(),
 		DarnifiedUI(),
 		DarnifiedUIConfigAddon(),
 		Streamline(),
-		#OSR(),
+		OSR(),
 		# Textures
 		QTP3R(),
 		GraphicImprovementProject(),
@@ -725,6 +761,10 @@ async def main(loop):
 		KoldornsCaveTextures2(),
 		MEAT(),
 		BomretTexturePackForShiveringIslesWithUSIP(),
+		# Gameplay
+		RealisticLeveling(),
+		HUDStatusBars(),
+		UV3(),
 		# Install Last
 		INITweaks(),
 		ArchiveInvalidationInvalidated(),
