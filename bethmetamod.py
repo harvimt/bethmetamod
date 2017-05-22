@@ -1,4 +1,6 @@
 import logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger('bethmetamod')
 
 import asyncio
 import sys
@@ -30,9 +32,6 @@ import known_folders
 from datetime import datetime, timedelta
 import shlex
 import subprocess
-
-logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger('bethmetamod')
 
 
 class Game:
