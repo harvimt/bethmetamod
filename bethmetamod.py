@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 import io
 import textwrap
-from utils import get_regkey, cachedclassproperty, get_file_id, sha256_path,\
+from utils import get_regkey, cachedclassproperty, get_file_id, sha256_path, \
 	http_request, extract_path_async, recurse_all, recurse_files, recurse_dirs, \
 	dir_is_empty
 import psutil
@@ -732,6 +732,7 @@ http://www.nexusmods.com/oblivion/ajax/downloadfile?id=1000008935
 
 class RealisticLeveling(Mod):
 	downloads = [NexusDownload('85564')]
+	# TODO - handle ini setting
 
 
 class HUDStatusBars(Mod):
@@ -905,6 +906,7 @@ async def main(loop):
 	log.info('purging')
 	purged_root = Config.PURGED_DIR / datetime.now().isoformat().replace(':', '')
 	for path in recurse_files(Config.game.root_dir):
+
 		if (
 			str(path).lower() not in converged_paths and
 			not path.suffix.lower() in {'.ini', '.cfg', '.json', '.log'} and
