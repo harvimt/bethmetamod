@@ -8,6 +8,7 @@ from asyncio_extras.file import open_async
 import os
 import time
 from enum import Enum
+import json
 
 from pathlib import Path
 import io
@@ -131,6 +132,10 @@ class Config:
 	def login_info(cls):
 		with cls.LOGIN_PATH.open('r') as f:
 			return yaml.safe_load(f)
+
+	@cachedclassproperty
+	def mod_ownership_path(cls):
+		return cls.MODS_DIR / 'mod_ownership.json'
 
 
 DownloadInfo = namedtuple('DownloadInfo', ('filename', 'size', 'sha256'))
@@ -921,6 +926,7 @@ async def main(loop):
 		ArchiveInvalidationInvalidated(),
 	]
 	converged_paths = {}
+	path_mod_owner = {}  # which mod owns which path
 	for path in recurse_files(Config.VANILLA_DIR):
 		converged_paths[str(path).lower()] = Config.VANILLA_DIR / path
 
@@ -945,6 +951,7 @@ async def main(loop):
 	for mod in mod_list:
 		await mod.preprocess()
 
+	log.info('calulcating convergance for each mod')
 	for mod in mod_list:
 		log.info(f'converging {mod.mod_name}')
 		for source_path, dest_path in mod.modify():
@@ -958,6 +965,7 @@ async def main(loop):
 				raise Exception(f'{source_path} is not a regular file.')
 
 			converged_paths[str(dest_path).lower()] = source_path
+			path_mod_owner[str(dest_path).lower()] = mod.mod_name
 
 	log.info('applying convergance')
 	for dest_path, source_path in converged_paths.items():
@@ -972,6 +980,11 @@ async def main(loop):
 				raise Exception(f'failed to hard link {source_path} to {dest_path} {source_path} (or {dest_path.parent}) not found')
 
 	log.info('purging')
+	try:
+		with Config.mod_ownership_path.open('rb') as f:
+			old_path_mod_owner = json.load(f)
+	except FileNotFoundError:
+		old_path_mod_owner = {}
 	purged_root = Config.PURGED_DIR / datetime.now().isoformat().replace(':', '')
 	for path in recurse_files(Config.game.root_dir):
 
@@ -981,9 +994,12 @@ async def main(loop):
 			#TODO don't purge xml files unless they're menu files
 			not path.parts[0].lower() in {'obmm', 'mopy'}
 		):
-			purged_path = purged_root / path
-			purged_path.parent.mkdir(exist_ok=True, parents=True)
-			(Config.game.root_dir / path).rename(purged_path)
+			if str(path).lower() in old_path_mod_owner:
+				path.unlink()
+			else:
+				purged_path = purged_root / path
+				purged_path.parent.mkdir(exist_ok=True, parents=True)
+				(Config.game.root_dir / path).rename(purged_path)
 
 	log.info('purging empty directories')
 	for d in recurse_dirs(Config.game.root_dir):
@@ -1025,6 +1041,10 @@ async def main(loop):
 			for esp in Config.game.root_dir.glob('Data/*.esp'):
 				ef.write(esp.name)
 				ef.write('\n')
+
+	log.info('saving which mod owns which file')
+	with atomic_save(str(Config.mod_ownership_path)) as f:
+		json.dump(path_mod_owner, f)
 
 
 if __name__ == '__main__':
