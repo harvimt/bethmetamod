@@ -830,6 +830,15 @@ async def main(loop):
 	for mod in mod_list:
 		log.info(f'converging {mod.mod_name}')
 		for source_path, dest_path in mod.modify():
+			if dest_path.is_absolute():
+				raise Exception(f'{source_path} is not absolute')
+			if not source_path.is_absolute():
+				raise Exception(f'{source_path} is not absolute')
+			elif not source_path.exists():
+				raise Exception(f'{source_path} does not exist, bad modify code')
+			elif not source_path.is_file():
+				raise Exception(f'{source_path} is not a regular file.')
+
 			converged_paths[str(dest_path).lower()] = source_path
 
 	log.info('applying convergance')
