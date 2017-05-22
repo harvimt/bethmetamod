@@ -391,6 +391,8 @@ class Mod:
 		root_path, = candidates
 
 		for path in recurse_files(root_path):
+			if path.parts[0].lower() == 'omod conversion data':
+				continue
 			yield root_path / path, Path('./data') / path
 
 	async def postprocess(self):
@@ -402,7 +404,11 @@ class Mod:
 		root_path = root_path or self.mod_path
 
 		for path in recurse_files(root_path / sub_path):
-			yield root_path / sub_path / path, Path(prefix) / sub_path / path
+			src_path = root_path / sub_path / path
+			dest_path = Path(prefix) / sub_path / path
+			if map(str.lower, dest_path.parts[0:1]) == ('data', 'omod conversion data'):
+				continue
+			yield src_path, dest_path
 
 
 class OBSE(Mod):
