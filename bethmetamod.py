@@ -999,7 +999,7 @@ async def main(loop):
 			not path.parts[0].lower() in {'obmm', 'mopy'}
 		):
 			if str(path).lower() in old_path_mod_owner:
-				path.unlink()
+				(Config.game.root_dir / path).unlink()
 			else:
 				purged_path = purged_root / path
 				purged_path.parent.mkdir(exist_ok=True, parents=True)
@@ -1048,7 +1048,8 @@ async def main(loop):
 
 	log.info('saving which mod owns which file')
 	with atomic_save(str(Config.mod_ownership_path)) as f:
-		json.dump(path_mod_owner, f)
+		with io.TextIOWrapper(f, 'ascii') as ef:
+			json.dump(path_mod_owner, ef)
 
 
 if __name__ == '__main__':
