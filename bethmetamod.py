@@ -7,6 +7,7 @@ import sys
 from asyncio_extras.file import open_async
 import os
 import time
+from enum import Enum
 
 from pathlib import Path
 import io
@@ -290,6 +291,73 @@ class Download(BaseDownload):
 			return
 
 		await self._do_download(self.url, mod, session)
+
+
+class PathType(Enum):
+	PLUGIN = '.esp or .esm script file'
+	BSA_ARCHIVE = '.bsa archive file'
+	OBSE_PLUGIN = 'OBSE Plugin'
+	EXECUTABLE = '.exe or .dll that is not something else'
+	TEXTURE = 'textures and other images'
+	MODEL = '3D Model'
+
+	INSTALLER_METADATA = 'installer metadata like omod converstion data or wizard scripts'
+	MENU_XML = 'Menu xml file (scalaform).'
+
+	DOCUMENTATION = 'READMEs and other docs'
+	CONFIGURATION = 'Configuration files'
+
+	OTHER = 'other'
+
+
+def classify_path(path):
+	"""
+	takes in a path relative to the game directory (not the Data/ directory).
+	and tells what type it is.
+
+	returns a PathType enumeration.
+	"""
+	#TODO lookup how to handle path-likes
+	path_parts = list(map(str.lower, path.parts))
+	path_suffix = path.suffix.lower()
+	suffix_map = {
+		'.esp': PathType.PLUGIN,
+		'.esm': PathType.PLUGIN,
+		'.bsa': PathType.BSA_ARCHIVE,
+		'.exe': PathType.EXECUTABLE,
+		'.bat': PathType.EXECUTABLE,
+		'.dds': PathType.TEXTURE,
+		'.html': PathType.DOCUMENTATION,
+		'.txt': PathType.DOCUMENTATION,
+		'.rtf': PathType.DOCUMENTATION,
+		'.ini': PathType.CONFIGURATION,
+		'.cfg': PathType.CONFIGURATION,
+	}
+	suffix_map_secondary = {
+		'.jpg': PathType.TEXTURE,
+		'.jpeg': PathType.TEXTURE,
+		'.png': PathType.TEXTURE,
+	}
+	if path_suffix in suffix_map:
+		return suffix_map[path_suffix]
+	elif path_suffix == '.dll':
+		if path_parts[:3] == ('data', 'obse', 'plugins'):
+			return PathType.OBSE_PLUGIN
+		else:
+			return PathType.EXECUTABLE
+	elif path_suffix == '.xml':
+		if path_parts[:2] == ('data', 'menus'):
+			return PathType.MENU_XML
+		else:
+			return PathType.CONFIGURATION
+	elif 'readme' in path.name.lower():
+		return PathType.DOCUMENTATION
+	elif 'docs' in path_parts:
+		return PathType.DOCUMENTATION
+	elif path_suffix in suffix_map_secondary:
+		return suffix_map_secondary[path_suffix]
+	else:
+		return PathType.OTHER
 
 
 class Mod:
