@@ -765,6 +765,42 @@ class ATakeAllAlsoBooks(Mod):
 	downloads = [NexusDownload('51876')]
 
 
+class HarvestFlora(Mod):
+	downloads = [NexusDownload('21250')]
+
+	def __init__(self, *, no_mushroom_stalks=False):
+		self.no_mushroom_stalks = no_mushroom_stalks
+
+	#def modify(self):
+		#pass
+
+
+class HarvestContainers(Mod):
+	downloads = [NexusDownload('62787')]
+
+	def __init__(
+		self, *,
+		ore_nodes=False,
+		player_home_addon=False,
+		havok_crates_addon=False,
+		flat_top_barrels=False,
+		si_ore_nodes=False,
+	):
+		self.ore_nodes = ore_nodes
+		self.player_home_addon = player_home_addon
+		self.havok_crates_addon = havok_crates_addon
+		self.flat_top_barrels = flat_top_barrels
+
+	def modify(self):
+		yield self.mod_path / 'Harvest Containers v0.99.14/Harvest[Containers].esm', Path('./Data/Harvest[Containers].esm')
+		self.install(Path('.'), self.mod_path / 'Harvest Containers v0.99.14/Standalones/Vanilla')
+
+		if True:  # FIXME SI is installed
+			self.install(Path('.'), self.mod_path / 'Harvest Containers v0.99.14/Standalones/Shivering Isles')
+
+		# TODO handle addons
+
+
 if sys.platform == 'win32':
 	loop = asyncio.ProactorEventLoop()
 	asyncio.set_event_loop(loop)
