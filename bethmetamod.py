@@ -15,7 +15,7 @@ import io
 import textwrap
 from utils import get_regkey, cachedclassproperty, get_file_id, sha256_path, \
 	http_request, extract_path_async, recurse_all, recurse_files, recurse_dirs, \
-	dir_is_empty
+	dir_is_empty, Timer
 import psutil
 import aiohttp
 import shelve
@@ -883,6 +883,16 @@ else:
 
 
 async def main(loop):
+	download_timer = Timer()
+	extract_timer = Timer()
+	mod_converge_timer = Timer()
+	apply_converge_timer = Timer()
+	purge_timer = Timer()
+	preproc_timer = Timer()
+	postproc_timer = Timer()
+	load_order_timer = Timer()
+	enable_plugins_timer = Timer()
+
 	mod_list = [
 		# Install outside of Data/
 		FastExit(),
@@ -931,126 +941,144 @@ async def main(loop):
 		converged_paths[str(path).lower()] = Config.VANILLA_DIR / path
 
 	log.info('downloading')
-	for mod in mod_list:
-		async with aiohttp.ClientSession(loop=loop) as session:
-			await mod.download(session)
+	with download_timer:
+		for mod in mod_list:
+			async with aiohttp.ClientSession(loop=loop) as session:
+				await mod.download(session)
 
 	if False:  # stop after download?
 		log.info('stopping after download')
 		return
 
 	log.info('extracting')
-	for mod in mod_list:
-		await mod.extract()
+	with extract_timer:
+		for mod in mod_list:
+			await mod.extract()
 
 	if False:  # stop after extract?
 		log.info('stopping after extract')
 		return
 
 	log.info('pre-processing')
-	for mod in mod_list:
-		await mod.preprocess()
+	with preproc_timer:
+		for mod in mod_list:
+			await mod.preprocess()
 
 	log.info('calulcating convergance for each mod')
-	for mod in mod_list:
-		log.info(f'converging {mod.mod_name}')
-		for source_path, dest_path in mod.modify():
-			if not isinstance(dest_path, Path):
-				raise Exception(f'{dest_path} is not a Path!')
-			elif dest_path.is_absolute():
-				raise Exception(f'{dest_path} is not absolute')
-			if not isinstance(source_path, Path):
-				raise Exception(f'{source_path} is not a Path!')
-			elif not source_path.is_absolute():
-				raise Exception(f'{source_path} is not absolute')
-			elif not source_path.exists():
-				raise Exception(f'{source_path} does not exist, bad modify code')
-			elif not source_path.is_file():
-				raise Exception(f'{source_path} is not a regular file.')
+	with mod_converge_timer:
+		for mod in mod_list:
+			log.info(f'converging {mod.mod_name}')
+			for source_path, dest_path in mod.modify():
+				if not isinstance(dest_path, Path):
+					raise Exception(f'{dest_path} is not a Path!')
+				elif dest_path.is_absolute():
+					raise Exception(f'{dest_path} is not absolute')
+				if not isinstance(source_path, Path):
+					raise Exception(f'{source_path} is not a Path!')
+				elif not source_path.is_absolute():
+					raise Exception(f'{source_path} is not absolute')
+				elif not source_path.exists():
+					raise Exception(f'{source_path} does not exist, bad modify code')
+				elif not source_path.is_file():
+					raise Exception(f'{source_path} is not a regular file.')
 
-			converged_paths[str(dest_path).lower()] = source_path
-			path_mod_owner[str(dest_path).lower()] = mod.mod_name
+				converged_paths[str(dest_path).lower()] = source_path
+				path_mod_owner[str(dest_path).lower()] = mod.mod_name
 
 	log.info('applying convergance')
-	for dest_path, source_path in converged_paths.items():
-		dest_path = Config.game.root_dir / dest_path
-		if not dest_path.exists() or not samefile(str(dest_path), str(source_path)):
-			if dest_path.exists():
-				dest_path.unlink()  # FIXME move to purged dir?
-			dest_path.parent.mkdir(exist_ok=True, parents=True)
-			try:
-				create_hardlink(str(source_path), str(dest_path))
-			except FileNotFoundError:
-				raise Exception(f'failed to hard link {source_path} to {dest_path} {source_path} (or {dest_path.parent}) not found')
+	with apply_converge_timer:
+		for dest_path, source_path in converged_paths.items():
+			dest_path = Config.game.root_dir / dest_path
+			if not dest_path.exists() or not samefile(str(dest_path), str(source_path)):
+				if dest_path.exists():
+					dest_path.unlink()  # FIXME move to purged dir?
+				dest_path.parent.mkdir(exist_ok=True, parents=True)
+				try:
+					create_hardlink(str(source_path), str(dest_path))
+				except FileNotFoundError:
+					raise Exception(f'failed to hard link {source_path} to {dest_path} {source_path} (or {dest_path.parent}) not found')
 
 	log.info('purging')
-	try:
-		with Config.mod_ownership_path.open('rb') as f:
-			old_path_mod_owner = json.load(f)
-	except FileNotFoundError:
-		old_path_mod_owner = {}
-	purged_root = Config.PURGED_DIR / datetime.now().isoformat().replace(':', '')
-	for path in recurse_files(Config.game.root_dir):
+	with purge_timer:
+		try:
+			with Config.mod_ownership_path.open('rb') as f:
+				old_path_mod_owner = json.load(f)
+		except FileNotFoundError:
+			old_path_mod_owner = {}
+		purged_root = Config.PURGED_DIR / datetime.now().isoformat().replace(':', '')
+		for path in recurse_files(Config.game.root_dir):
 
-		if (
-			str(path).lower() not in converged_paths and
-			not path.suffix.lower() in {'.ini', '.cfg', '.json', '.log'} and
-			#TODO don't purge xml files unless they're menu files
-			not path.parts[0].lower() in {'obmm', 'mopy'}
-		):
-			if str(path).lower() in old_path_mod_owner:
-				(Config.game.root_dir / path).unlink()
-			else:
-				purged_path = purged_root / path
-				purged_path.parent.mkdir(exist_ok=True, parents=True)
-				(Config.game.root_dir / path).rename(purged_path)
+			if (
+				str(path).lower() not in converged_paths and
+				not path.suffix.lower() in {'.ini', '.cfg', '.json', '.log'} and
+				#TODO don't purge xml files unless they're menu files
+				not path.parts[0].lower() in {'obmm', 'mopy'}
+			):
+				if str(path).lower() in old_path_mod_owner:
+					(Config.game.root_dir / path).unlink()
+				else:
+					purged_path = purged_root / path
+					purged_path.parent.mkdir(exist_ok=True, parents=True)
+					(Config.game.root_dir / path).rename(purged_path)
 
-	log.info('purging empty directories')
-	for d in recurse_dirs(Config.game.root_dir):
-		if dir_is_empty(d):
-			d.rmdir()
+		log.info('purging empty directories')
+		for d in recurse_dirs(Config.game.root_dir):
+			if dir_is_empty(d):
+				d.rmdir()
 
 	log.info('postprocessing')
-	for mod in mod_list:
-		await mod.postprocess()
+	with postproc_timer:
+		for mod in mod_list:
+			await mod.postprocess()
 	log.info('Done Applying Changes')
 
 	log.info('modifying load order')
-	boss_uninstall_string = get_regkey('HKLM', r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BOSS', 'UninstallString')
-	boss_install_location = Path(shlex.split(boss_uninstall_string)[0]).parent
-	boss_exe_path = boss_install_location / 'boss.exe'
+	with load_order_timer:
+		boss_uninstall_string = get_regkey('HKLM', r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BOSS', 'UninstallString')
+		boss_install_location = Path(shlex.split(boss_uninstall_string)[0]).parent
+		boss_exe_path = boss_install_location / 'boss.exe'
 
-	proc = await asyncio.create_subprocess_exec(
-		str(boss_exe_path), '-s', '-g', Config.game.BOSS_NAME,
-		cwd=str(boss_install_location),
-		stderr=sys.stderr,
-		stdout=sys.stdout,
-	)
-	await proc.wait()
+		proc = await asyncio.create_subprocess_exec(
+			str(boss_exe_path), '-s', '-g', Config.game.BOSS_NAME,
+			cwd=str(boss_install_location),
+			stderr=sys.stderr,
+			stdout=sys.stdout,
+		)
+		await proc.wait()
 
 	log.info('enabling all .esp and .esm files')
-	PLUGINS_HEADER = textwrap.dedent('''
-	# This file is used to tell Oblivion which data files to load.
-	# WRITE YOUR OWN PYTHON SCRIPT TO MODIFY THIS FILE (lol)
-	# Please do not modify this file by hand.
-	''').strip()
+	with enable_plugins_timer:
+		PLUGINS_HEADER = textwrap.dedent('''
+		# This file is used to tell Oblivion which data files to load.
+		# WRITE YOUR OWN PYTHON SCRIPT TO MODIFY THIS FILE (lol)
+		# Please do not modify this file by hand.
+		''').strip()
 
-	with atomic_save(str(Config.game.app_data_path / 'plugins.txt')) as f:
-		with io.TextIOWrapper(f, 'ascii') as ef:
-			ef.write(PLUGINS_HEADER)
-			ef.write('\n')
-			for esm in Config.game.root_dir.glob('Data/*.esm'):
-				ef.write(esm.name)
+		with atomic_save(str(Config.game.app_data_path / 'plugins.txt')) as f:
+			with io.TextIOWrapper(f, 'ascii') as ef:
+				ef.write(PLUGINS_HEADER)
 				ef.write('\n')
-			for esp in Config.game.root_dir.glob('Data/*.esp'):
-				ef.write(esp.name)
-				ef.write('\n')
+				for esm in Config.game.root_dir.glob('Data/*.esm'):
+					ef.write(esm.name)
+					ef.write('\n')
+				for esp in Config.game.root_dir.glob('Data/*.esp'):
+					ef.write(esp.name)
+					ef.write('\n')
 
 	log.info('saving which mod owns which file')
 	with atomic_save(str(Config.mod_ownership_path)) as f:
 		with io.TextIOWrapper(f, 'ascii') as ef:
 			json.dump(path_mod_owner, ef)
 
+	log.info(f'download_timer = {download_timer}')
+	log.info(f'extract_timer = {extract_timer}')
+	log.info(f'mod_converge_timer = {mod_converge_timer}')
+	log.info(f'apply_converge_timer = {apply_converge_timer}')
+	log.info(f'purge_timer = {purge_timer}')
+	log.info(f'preproc_timer = {preproc_timer}')
+	log.info(f'postproc_timer = {postproc_timer}')
+	log.info(f'load_order_timer = {load_order_timer}')
+	log.info(f'enable_plugins_timer = {enable_plugins_timer}')
 
 if __name__ == '__main__':
 	loop.run_until_complete(main(loop))

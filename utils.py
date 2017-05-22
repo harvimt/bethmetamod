@@ -7,6 +7,7 @@ import subprocess
 
 from pathlib import Path
 from collections import namedtuple
+import datetime
 
 import winreg
 import win32com.client
@@ -228,3 +229,14 @@ async def extract_path_async(path, extractdir=None):
 	stdout, stderr = await proc.communicate()
 	if proc.returncode != 0:
 		raise Exception(f'7zip returncode={proc.returncode}')
+
+
+class Timer:
+	def __enter__(self):
+		self.start_time = datetime.datetime.now()
+
+	def __exit__(self, *a, **kw):
+		self.time = datetime.datetime.now() - self.start_time
+
+	def __str__(self):
+		return str(self.time)
