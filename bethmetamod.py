@@ -755,6 +755,10 @@ class NifSE(Mod):
 	downloads = [NexusDownload('84943')]
 
 
+class ATakeAllAlsoBooks(Mod):
+	downloads = [NexusDownload('51876')]
+
+
 if sys.platform == 'win32':
 	loop = asyncio.ProactorEventLoop()
 	asyncio.set_event_loop(loop)
