@@ -5,3 +5,4 @@ mods/
 vanilla/
 purged/
 *.env
+.*.sw[po]
