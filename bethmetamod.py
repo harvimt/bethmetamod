@@ -810,22 +810,29 @@ else:
 
 async def main(loop):
 	mod_list = [
+		# Install outside of Data/
 		FastExit(),
 		FourGBPatch(),
 		OBSE(),
-		OneTweak(),
-		OBSETester(),
-		MenuQue(),
 		ENB(),
 		ENBoost(),
 		MoreHeap(),
+		# OBSE Plugins
+		OneTweak(),
+		# OBSETester(),
+		MenuQue(),
 		ConScribe(),
 		Pluggy(),
 		NifSE(),
-		DarnifiedUI(),
-		DarnifiedUIConfigAddon(),
+		# Performance
 		Streamline(),
 		OSR(),
+		# Necessary Tweaks
+		ATakeAllAlsoBooks(),
+		DarnifiedUI(),
+		DarnifiedUIConfigAddon(),
+		HarvestFlora(),
+		HarvestContainers(),
 		# Textures
 		QTP3R(),
 		GraphicImprovementProject(),
