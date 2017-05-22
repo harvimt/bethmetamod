@@ -955,9 +955,13 @@ async def main(loop):
 	for mod in mod_list:
 		log.info(f'converging {mod.mod_name}')
 		for source_path, dest_path in mod.modify():
-			if dest_path.is_absolute():
-				raise Exception(f'{source_path} is not absolute')
-			if not source_path.is_absolute():
+			if not isinstance(dest_path, Path):
+				raise Exception(f'{dest_path} is not a Path!')
+			elif dest_path.is_absolute():
+				raise Exception(f'{dest_path} is not absolute')
+			if not isinstance(source_path, Path):
+				raise Exception(f'{source_path} is not a Path!')
+			elif not source_path.is_absolute():
 				raise Exception(f'{source_path} is not absolute')
 			elif not source_path.exists():
 				raise Exception(f'{source_path} does not exist, bad modify code')
