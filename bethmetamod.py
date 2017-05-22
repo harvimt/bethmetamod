@@ -865,7 +865,7 @@ async def main(loop):
 		if (
 			str(path).lower() not in converged_paths and
 			not path.suffix.lower() in {'.ini', '.cfg', '.xml', '.json', '.log'} and
-			not path.parts[0].lower() in {'obmm'}
+			not path.parts[0].lower() in {'obmm', 'mopy'}
 		):
 			purged_path = purged_root / path
 			purged_path.parent.mkdir(exist_ok=True, parents=True)
