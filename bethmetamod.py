@@ -864,7 +864,8 @@ async def main(loop):
 	for path in recurse_files(Config.game.root_dir):
 		if (
 			str(path).lower() not in converged_paths and
-			not path.suffix.lower() in {'.ini', '.cfg', '.xml', '.json', '.log'} and
+			not path.suffix.lower() in {'.ini', '.cfg', '.json', '.log'} and
+			#TODO don't purge xml files unless they're menu files
 			not path.parts[0].lower() in {'obmm', 'mopy'}
 		):
 			purged_path = purged_root / path
