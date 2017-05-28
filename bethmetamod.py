@@ -5,8 +5,6 @@ log = logging.getLogger('bethmetamod')
 import asyncio
 import sys
 from asyncio_extras.file import open_async
-import os
-import time
 from enum import Enum
 import json
 
@@ -16,126 +14,21 @@ import textwrap
 from utils import get_regkey, cachedclassproperty, get_file_id, sha256_path, \
 	http_request, extract_path_async, recurse_all, recurse_files, recurse_dirs, \
 	dir_is_empty, Timer
-import psutil
 import aiohttp
-import shelve
 from collections import namedtuple
 from boltons.cacheutils import cachedproperty
 from boltons.strutils import camel2under
 from boltons.fileutils import atomic_save
 from tqdm import tqdm
 import urllib.parse
-import yaml
 import re
 from ntfsutils.hardlink import samefile, create as create_hardlink
 import pefile
-import known_folders
 
 from datetime import datetime, timedelta
 import shlex
 import subprocess
-
-
-class Game:
-	"""Abstract base class representing a video game."""
-
-	@classmethod
-	def get_root_dir(cls, tries=5):
-		try:
-			return Path(get_regkey(r'HKLM', rf'SOFTWARE\WOW6432Node\Bethesda Softworks\{cls.REG_NAME}', 'installed path'))
-		except FileNotFoundError:
-			if tries:
-				cls.ping_launcher()
-				return cls.get_root_dir(tries=(tries - 1))
-			else:
-				raise
-
-	@classmethod
-	def ping_launcher(cls):
-		"""Start the Launcher and then immediately close it."""
-		cls.start_steam()
-		for i in range(60):
-			log.debug('waiting for 1 second')
-			time.sleep(1)
-			procs = map(psutil.Process, psutil.pids())
-			ob_launcher, = (proc for proc in procs if proc.name() == cls.LAUNCHER_EXE)
-			ob_launcher.kill()
-
-	@classmethod
-	def start_steam(cls):
-		os.startfile(f'steam://run/{cls.STEAM_ID}')
-
-	@cachedclassproperty
-	def root_dir(cls):
-		return cls.get_root_dir()
-
-	@cachedclassproperty
-	def game_exe(cls):
-		return cls.root_dir / cls.GAME_EXE
-
-	@cachedclassproperty
-	def launcher_exe(cls):
-		return cls.root_dir / cls.LAUNCHER_EXE
-
-	@cachedclassproperty
-	def tesxedit_exe(cls):
-		return cls.root_dir / cls.TESXEDIT_EXE
-
-	@cachedclassproperty
-	def user_data_path(cls):
-		# TODO probably more things I need to do to get localized "My Games"
-		return Path(known_folders.get_path('Documents')) / 'My Games' / cls.REG_NAME
-
-	@cachedclassproperty
-	def app_data_path(cls):
-		return Path(known_folders.get_path('LocalAppData')) / cls.REG_NAME
-
-	@cachedclassproperty
-	def user_ini(cls):
-		return cls.user_data_path / f'{cls.REG_NAME}.ini'
-
-
-class Oblivion(Game):
-	REG_NAME = 'oblivion'
-	BOSS_NAME = 'Oblivion'
-	STEAM_ID = '22330'
-	LAUNCHER_EXE = 'OblivionLauncher.exe'
-	GAME_EXE = 'Oblivion.exe'
-	TESXEDIT_EXE = 'TES4Edit.exe'
-	NEXUS_NAME = 'oblivion'
-	DEFAULT_ARCHIVE_LIST = 'Oblivion - Meshes.bsa, Oblivion - Textures - Compressed.bsa, Oblivion - Sounds.bsa, Oblivion - Voices1.bsa, Oblivion - Voices2.bsa, Oblivion - Misc.bsa'
-
-
-class Config:
-	DOWNLOADS_DIR = Path(r'W:\bethmetamod-dls')  # TODO
-	DOWNLOADS_DB = Path(r'W:\bethmetamod-dls\downloads.shelve')
-	HASHES_DB = Path(r'W:\bethmetamod-dls\hashes.shelve')
-	MODS_DIR = Path(r'M:\bethmetamod\mods')
-	LOGIN_PATH = Path(r'M:\bethmetamod\logins.yml')
-	VANILLA_DIR = Path(r'M:\bethmetamod\vanilla')
-	PURGED_DIR = Path(r'M:\bethmetamod\purged')
-	CHUNK_SIZE = (1024**2)  # 1 MB
-
-	@cachedclassproperty
-	def game(cls):
-		return Oblivion
-
-	@cachedclassproperty
-	def downloads_db(cls):
-		return shelve.open(str(cls.DOWNLOADS_DB))
-
-	@cachedclassproperty
-	def hashes_db(cls):
-		return shelve.open(str(cls.HASHES_DB))
-
-	@cachedclassproperty
-	def login_info(cls):
-		with cls.LOGIN_PATH.open('r') as f:
-			return yaml.safe_load(f)
-
-	@cachedclassproperty
-	def mod_ownership_path(cls):
-		return cls.MODS_DIR / 'mod_ownership.json'
+from config import Config
 
 
 DownloadInfo = namedtuple('DownloadInfo', ('filename', 'size', 'sha256'))
